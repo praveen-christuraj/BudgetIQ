@@ -101,6 +101,9 @@ volumes:
     name: family_finance_uploads
 
 networks:
+  # `internal` carries database traffic; `web` is the only network the published
+  # ports sit on. PostgreSQL has no published port and no route to the host LAN.
   internal:
     internal: false
   web:
+    internal: false
