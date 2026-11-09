@@ -1,0 +1,109 @@
+# ---------------------------------------------------------------------------
+# Family Finance Manager - home / private network deployment
+#
+#   docker compose up -d --build
+#
+# Frontend:  http://<host-lan-ip>:8080
+# API docs:  http://<host-lan-ip>:8000/api/docs
+# PostgreSQL is intentionally NOT published to the host network.
+# ---------------------------------------------------------------------------
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: family-finance-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-family_finance}
+      POSTGRES_USER: ${POSTGRES_USER:-family_finance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGTZ: Asia/Kolkata
+      TZ: Asia/Kolkata
+    volumes:
+      - family_finance_pgdata:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-family_finance} -d ${POSTGRES_DB:-family_finance}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # No `ports:` mapping - the database stays inside the Docker network.
+
+  api:
+    build: ./backend
+    container_name: family-finance-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_NAME: ${APP_NAME:-Family Finance Manager}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-family_finance}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-family_finance}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:8080}
+      UPLOAD_DIR: /data/uploads
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
+    volumes:
+      - family_finance_uploads:/data/uploads
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    networks:
+      - internal
+      - web
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: /api/v1
+    container_name: family-finance-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    networks:
+      - web
+
+  # Daily PostgreSQL dump + weekly attachment archive, with retention cleanup.
+  backup:
+    build:
+      context: ./backups
+    container_name: family-finance-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-family_finance}
+      PGUSER: ${POSTGRES_USER:-family_finance}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_ENCRYPTION_PASSPHRASE: ${BACKUP_ENCRYPTION_PASSPHRASE:-}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - ./backups:/backups
+      - family_finance_uploads:/data/uploads:ro
+    networks:
+      - internal
+
+volumes:
+  family_finance_pgdata:
+    name: family_finance_pgdata
+  family_finance_uploads:
+    name: family_finance_uploads
+
+networks:
+  # `internal` carries database traffic; `web` is the only network the published
+  # ports sit on. PostgreSQL has no published port and no route to the host LAN.
+  internal:
+    internal: false
+  web:
+    internal: false
