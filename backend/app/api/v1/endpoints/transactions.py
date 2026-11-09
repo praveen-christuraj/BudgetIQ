@@ -1,0 +1,385 @@
+"""Income and expense transactions, receipts and reversal-based deletion."""
+import shutil
+import uuid
+from datetime import date
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.core.database import get_db
+from app.core.deps import CurrentContext, client_ip, get_current_context
+from app.core.errors import bad_request, not_found
+from app.models.transaction import Transaction, TransactionAttachment
+from app.permissions.rbac import assert_can_view_transaction, can_edit_transaction, is_admin, transaction_visibility_filter
+from app.schemas.common import Message, Page
+from app.schemas.finance import (
+    AttachmentOut,
+    DuplicateWarning,
+    ReverseRequest,
+    TransactionCreate,
+    TransactionCreateResult,
+    TransactionOut,
+    TransactionUpdate,
+)
+from app.services.audit import log_event
+from app.services.serializers import transaction_out
+from app.services.transactions import (
+    TX_LOAD_OPTIONS,
+    create_transaction,
+    detect_duplicates,
+    get_transaction,
+    list_transactions,
+    reverse_transaction,
+    update_transaction,
+)
+from app.reports.export import ReportDocument, ReportSection, build_excel
+
+router = APIRouter(prefix="/transactions", tags=["Transactions"])
+
+MAX_EXPORT_ROWS = 5000
+
+
+@router.get("", response_model=Page[TransactionOut])
+def list_transactions_endpoint(
+    q: str | None = Query(default=None, max_length=120),
+    transaction_type: str | None = Query(default=None, pattern="^(income|expense)$"),
+    scope: str | None = Query(default=None, pattern="^(shared|personal)$"),
+    status: str | None = Query(default=None, pattern="^(draft|posted|reversed)$"),
+    member_id: uuid.UUID | None = None,
+    account_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    min_amount: float | None = None,
+    max_amount: float | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=200),
+    sort: str = Query(default="date_desc", pattern="^(date_desc|date_asc|amount_desc|amount_asc)$"),
+    ctx: CurrentContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    items, total, page, page_size = list_transactions(
+        db,
+        ctx,
+        visibility=transaction_visibility_filter(ctx),
+        q=q,
+        transaction_type=transaction_type,
+        scope=scope,
+        status=status,
+        member_id=member_id,
+        account_id=account_id,
+        category_id=category_id,
+        date_from=date_from,
+        date_to=date_to,
+        min_amount=min_amount,
+        max_amount=max_amount,
+        page=page,
+        page_size=page_size,
+        sort=sort,
+    )
+    pages = (total + page_size - 1) // page_size if total else 0
+    return Page[TransactionOut](
+        items=[transaction_out(txn, ctx) for txn in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        pages=pages,
+    )
+
+
+@router.get("/export")
+def export_transactions(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    member_id: uuid.UUID | None = None,
+    account_id: uuid.UUID | None = None,
+    category_id: uuid.UUID | None = None,
+    transaction_type: str | None = Query(default=None, pattern="^(income|expense)$"),
+    ctx: CurrentContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    items, total, _, _ = list_transactions(
+        db,
+        ctx,
+        visibility=transaction_visibility_filter(ctx),
+        transaction_type=transaction_type,
+        member_id=member_id,
+        account_id=account_id,
+        category_id=category_id,
+        date_from=date_from,
+        date_to=date_to,
+        page=1,
+        page_size=MAX_EXPORT_ROWS,
+    )
+    rows = []
+    for txn in items:
+        rows.append(
+            [
+                txn.transaction_date,
+                txn.transaction_type.title(),
+                txn.description,
+                txn.category.name if txn.category else "-",
+                txn.account.name if txn.account else "-",
+                txn.scope.title(),
+                txn.owner.full_name if txn.owner else "Household",
+                txn.payment_method.replace("_", " ").title(),
+                txn.amount,
+                txn.status.title(),
+                txn.created_by_user.full_name if txn.created_by_user else "-",
+            ]
+        )
+    document = ReportDocument(
+        title="Transaction Register",
+        subtitle="Family Finance Manager - posted and draft transactions",
+        meta={
+            "Period": f"{date_from or 'all time'} to {date_to or date.today()}",
+            "Records": total,
+            "Generated by": ctx.user.full_name,
+            "Household": ctx.household.name,
+        },
+        sections=[
+            ReportSection(
+                title="Transactions",
+                headers=[
+                    "Date",
+                    "Type",
+                    "Description",
+                    "Category",
+                    "Account",
+                    "Scope",
+                    "Owner",
+                    "Payment",
+                    "Amount (INR)",
+                    "Status",
+                    "Created by",
+                ],
+                rows=rows,
+                total_row=["", "", "", "", "", "", "", "Total", sum((t.amount for t in items), start=0), "", ""],
+            )
+        ],
+    )
+    stream = build_excel(document)
+    filename = f"transactions_{date.today().isoformat()}.xlsx"
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{transaction_id}", response_model=TransactionOut)
+def get_transaction_endpoint(
+    transaction_id: uuid.UUID,
+    ctx: CurrentContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    txn = get_transaction(db, ctx, transaction_id)
+    assert_can_view_transaction(ctx, txn)
+    return transaction_out(txn, ctx)
+
+
+@router.post("", response_model=TransactionCreateResult, status_code=201)
+def create_transaction_endpoint(
+    payload: TransactionCreate,
+    request: Request,
+    ctx: CurrentContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    txn, warnings = create_transaction(db, ctx, payload, ip=client_ip(request))
+    db.commit()
+    db.refresh(txn)
+    return TransactionCreateResult(
+        transaction=transaction_out(txn, ctx),
+        duplicate_warnings=[
+            DuplicateWarning(
+                transaction_id=warning.id,
+                description=warning.description,
+                amount=warning.amount,
+                transaction_date=warning.transaction_date,
+                account_id=warning.account_id,
+            )
+            for warning in warnings
+        ],
+    )
+
+
+@router.put("/{transaction_id}", response_model=TransactionOut)
+def update_transaction_endpoint(
+    transaction_id: uuid.UUID,
+    payload: TransactionUpdate,
+    request: Request,
+    ctx: CurrentContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    txn = update_transaction(db, ctx, transaction_id, payload, ip=client_ip(request))
+    db.commit()
+    db.refresh(txn)
+    return transaction_out(txn, ctx)
+
+
+@router.post("/{transaction_id}/reverse", response_model=TransactionOut)
+def reverse_transaction_endpoint(
+    transaction_id: uuid.UUID,
+    payload: ReverseRequest,
+    request: Request,
+    ctx: CurrentContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    txn = reverse_transaction(db, ctx, transaction_id, payload.reason, ip=client_ip(request))
+    db.commit()
+    db.refresh(txn)
+    return transaction_out(txn, ctx)
+
+
+@router.delete("/{transaction_id}", response_model=Message)
+def delete_transaction_endpoint(
+    transaction_id: uuid.UUID,
+    request: Request,
+    reason: str = Query(default="Deleted by user", max_length=300),
+    ctx: CurrentContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    """Soft delete. Posted financial records are reversed, never destroyed."""
+    txn = reverse_transaction(db, ctx, transaction_id, reason, ip=client_ip(request))
+    db.commit()
+    return Message(message=f"Transaction reversed and preserved for audit (ID {txn.id})")
+
+
+@router.get("/{transaction_id}/duplicates", response_model=list[DuplicateWarning])
+def check_duplicates(
+    transaction_id: uuid.UUID,
+    ctx: CurrentContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    txn = get_transaction(db, ctx, transaction_id)
+    assert_can_view_transaction(ctx, txn)
+    warnings = detect_duplicates(
+        db,
+        ctx,
+        amount=txn.amount,
+        txn_date=txn.transaction_date,
+        account_id=txn.account_id,
+        transaction_type=txn.transaction_type,
+        exclude_id=txn.id,
+    )
+    return [
+        DuplicateWarning(
+            transaction_id=w.id,
+            description=w.description,
+            amount=w.amount,
+            transaction_date=w.transaction_date,
+            account_id=w.account_id,
+        )
+        for w in warnings
+    ]
+
+
+@router.post("/{transaction_id}/attachments", response_model=AttachmentOut, status_code=201)
+def upload_attachment(
+    transaction_id: uuid.UUID,
+    request: Request,
+    file: UploadFile = File(...),
+    ctx: CurrentContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    txn = get_transaction(db, ctx, transaction_id)
+    if not can_edit_transaction(ctx, txn):
+        raise not_found("Transaction")
+
+    if file.content_type not in settings.allowed_upload_types:
+        raise bad_request(
+            "Unsupported file type. Allowed types: PDF, PNG, JPEG, WEBP."
+        )
+
+    safe_original = Path(file.filename or "receipt").name[:200]
+    suffix = Path(safe_original).suffix.lower()[:10]
+    stored_name = f"{uuid.uuid4().hex}{suffix}"
+    destination = settings.upload_path / stored_name
+    size = 0
+    limit = settings.max_upload_mb * 1024 * 1024
+
+    with destination.open("wb") as buffer:
+        while chunk := file.file.read(1024 * 1024):
+            size += len(chunk)
+            if size > limit:
+                buffer.close()
+                destination.unlink(missing_ok=True)
+                raise bad_request(f"File exceeds the {settings.max_upload_mb} MB limit")
+            buffer.write(chunk)
+
+    if size == 0:
+        destination.unlink(missing_ok=True)
+        raise bad_request("Uploaded file is empty")
+
+    attachment = TransactionAttachment(
+        transaction_id=txn.id,
+        filename=safe_original,
+        stored_name=stored_name,
+        content_type=file.content_type,
+        size_bytes=size,
+        uploaded_by=ctx.user.id,
+    )
+    db.add(attachment)
+    log_event(
+        db,
+        ctx,
+        action="transaction.attachment_upload",
+        entity_type="transaction",
+        entity_id=txn.id,
+        summary=f"Uploaded receipt '{safe_original}' ({size} bytes)",
+        ip_address=client_ip(request),
+    )
+    db.commit()
+    db.refresh(attachment)
+    return AttachmentOut.model_validate(attachment)
+
+
+@router.get("/{transaction_id}/attachments/{attachment_id}")
+def download_attachment(
+    transaction_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    ctx: CurrentContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    txn = get_transaction(db, ctx, transaction_id)
+    assert_can_view_transaction(ctx, txn)
+    attachment = db.get(TransactionAttachment, attachment_id)
+    if attachment is None or attachment.transaction_id != txn.id:
+        raise not_found("Attachment")
+    path = settings.upload_path / attachment.stored_name
+    if not path.exists():
+        raise not_found("Attachment file")
+    return FileResponse(path, media_type=attachment.content_type, filename=attachment.filename)
+
+
+@router.delete("/{transaction_id}/attachments/{attachment_id}", response_model=Message)
+def delete_attachment(
+    transaction_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    request: Request,
+    ctx: CurrentContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    txn = get_transaction(db, ctx, transaction_id)
+    if not can_edit_transaction(ctx, txn):
+        raise not_found("Transaction")
+    attachment = db.get(TransactionAttachment, attachment_id)
+    if attachment is None or attachment.transaction_id != txn.id:
+        raise not_found("Attachment")
+    (settings.upload_path / attachment.stored_name).unlink(missing_ok=True)
+    db.delete(attachment)
+    log_event(
+        db,
+        ctx,
+        action="transaction.attachment_delete",
+        entity_type="transaction",
+        entity_id=txn.id,
+        summary=f"Removed receipt '{attachment.filename}'",
+        ip_address=client_ip(request),
+    )
+    db.commit()
+    return Message(message="Attachment removed")
