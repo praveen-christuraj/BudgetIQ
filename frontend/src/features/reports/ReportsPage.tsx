@@ -36,7 +36,7 @@ import { reportsApi, settingsApi } from '@/services/endpoints';
 import { formatDate, formatMoney, formatPercent } from '@/utils/format';
 import { budgetStatusColor } from '@/utils/status';
 
-const TABS = [
+export const REPORT_TABS = [
   { key: 'monthly', label: 'Monthly', export: 'monthly-summary' },
   { key: 'annual', label: 'Annual summary', export: 'annual-summary' },
   { key: 'category', label: 'Categories', export: 'category-expenses' },
@@ -49,7 +49,7 @@ const TABS = [
   { key: 'recurring', label: 'Recurring', export: 'recurring-schedule' },
 ] as const;
 
-type TabKey = (typeof TABS)[number]['key'];
+export type ReportTabKey = (typeof REPORT_TABS)[number]['key'];
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -70,7 +70,7 @@ function yearEnd(year: number): string {
 
 export function ReportsPage() {
   const { notify } = useFeedback();
-  const [tab, setTab] = useState<TabKey>('annual');
+  const [tab, setTab] = useState<ReportTabKey>('annual');
   const [year, setYear] = useState(currentYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [dateFrom, setDateFrom] = useState(yearStart(currentYear()));
@@ -135,7 +135,7 @@ export function ReportsPage() {
     (tab === 'recurring' && recurring.isLoading);
 
   const exportReport = async (format: 'xlsx' | 'pdf') => {
-    const config = TABS.find((item) => item.key === tab)!;
+    const config = REPORT_TABS.find((item) => item.key === tab)!;
     try {
       await reportsApi.exportReport({
         report: config.export,
@@ -169,12 +169,12 @@ export function ReportsPage() {
       <Card sx={{ mb: 2 }}>
         <Tabs
           value={tab}
-          onChange={(_event, value: TabKey) => setTab(value)}
+          onChange={(_event, value: ReportTabKey) => setTab(value)}
           variant="scrollable"
           allowScrollButtonsMobile
           sx={{ px: 1, borderBottom: '1px solid', borderColor: 'divider' }}
         >
-          {TABS.map((item) => (
+          {REPORT_TABS.map((item) => (
             <Tab key={item.key} value={item.key} label={item.label} />
           ))}
         </Tabs>

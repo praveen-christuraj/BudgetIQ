@@ -16,7 +16,7 @@ Built exactly to the *Family Budget & Expense Management System* blueprint:
 | Tests | Pytest (backend), Vitest + Testing Library (frontend) |
 | Deployment | Docker Compose on a home computer / private LAN |
 
-![modules](https://img.shields.io/badge/modules-11-1B5E20) ![tests](https://img.shields.io/badge/backend_tests-45_passed-2E7D32) ![money](https://img.shields.io/badge/money-Decimal_only-00695C)
+![modules](https://img.shields.io/badge/modules-11-1B5E20) ![tests](https://img.shields.io/badge/backend_tests-45_passed%20%C2%B7%20frontend_tests-13_passed-2E7D32) ![money](https://img.shields.io/badge/money-Decimal_only-00695C)
 
 ---
 
@@ -136,7 +136,7 @@ are consistent with what a family would see. **Never run it against production.*
 
 ```bash
 cd backend && ../.venv/bin/python -m pytest     # 45 tests
-cd frontend && npm test                          # 11 tests
+cd frontend && npm test                          # 13 tests
 cd frontend && npm run build                     # typecheck + production build
 ```
 
