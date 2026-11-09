@@ -143,7 +143,15 @@ cd frontend && npm run build                     # typecheck + production build
 Covered behaviour includes: balance derivation, drafts vs posted, shared/personal
 independence, member privacy, audit snapshots, reversal restoring balances, transfer
 accounting, budget thresholds and carry-forward, savings/loan separation from expenses,
-dashboard aggregation, notifications and Excel/PDF export bytes.
+dashboard aggregation, notifications and Excel/PDF export bytes. Every frontend screen also
+has a render smoke test, so a page that throws cannot ship.
+
+To prove the business rules on a running instance (re-seed afterwards, it writes data):
+
+```bash
+cd backend && ../.venv/bin/python scripts/seed_demo.py --reset
+cd backend && ../.venv/bin/python scripts/verify_rules.py
+```
 
 ## Security & financial integrity
 

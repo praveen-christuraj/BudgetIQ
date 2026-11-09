@@ -121,6 +121,7 @@ keys produce a valid xlsx; monthly/shared-vs-personal also assert PDF).
 | Frontend units | `format.test.ts` (money/date formatting), `StatCard.test.tsx` |
 | Frontend behaviour | `reports.test.tsx` pins the ten report tabs and their export keys; `transactions.page.test.tsx` asserts scope badges, signed amounts, draft status and reversal-instead-of-delete; `pages.smoke.test.tsx` renders all 15 screens with a stubbed API so a broken page cannot ship |
 | Backup / restore | `backups/backup.sh`, `backups/backup-loop.sh`, runbook in [DOCKER_DEPLOYMENT_GUIDE.md](DOCKER_DEPLOYMENT_GUIDE.md#restore-procedure) |
+| Business rules end to end | `backend/scripts/verify_rules.py` proves every §9 rule through the public API against a seeded demo household |
 
 Run everything with:
 
@@ -128,7 +129,19 @@ Run everything with:
 cd backend && ../.venv/bin/python -m pytest     # 45 tests
 cd frontend && npx vitest run                   # 31 tests
 cd frontend && npx tsc --noEmit && npm run build
+
+# Rule-by-rule proof against a running API (mutates the database, so re-seed after):
+cd backend && ../.venv/bin/python scripts/seed_demo.py --reset
+cd backend && ../.venv/bin/python scripts/verify_rules.py
 ```
+
+`verify_rules.py` checks, on the live API: anonymous access is rejected; a personal
+expense paid from a shared account moves the shared balance but not shared spending; a
+member cannot read or edit another member's personal transaction; reversal restores the
+balance and is audited; transfers never touch income/expense totals; drafts are excluded
+from budget actuals; savings contributions are not expenses; loan principal repayment does
+not become consumption; recurring rules produce drafts only; all ten report types export;
+member-wise reports are self-scoped; the audit trail keeps before/after JSON.
 
 ## Phase 9 — Home deployment · Done (review only)
 
