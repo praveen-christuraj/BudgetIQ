@@ -1,5 +1,6 @@
 """Savings goals and contributions."""
 import uuid
+from decimal import Decimal
 from datetime import date
 
 from sqlalchemy import Date, ForeignKey, Numeric, String, Text
@@ -20,7 +21,7 @@ class SavingsGoal(Base, TimestampMixin):
         GUID(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     name: Mapped[str] = mapped_column(String(120), nullable=False)
-    target_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)
+    target_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False)
     account_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -45,7 +46,7 @@ class SavingsContribution(Base, TimestampMixin):
     goal_id: Mapped[uuid.UUID] = mapped_column(
         GUID(), ForeignKey("savings_goals.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     contribution_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     account_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True

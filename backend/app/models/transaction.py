@@ -1,5 +1,6 @@
 """Transactions, receipts/attachments and account transfers."""
 import uuid
+from decimal import Decimal
 from datetime import date, datetime
 
 from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text
@@ -50,7 +51,7 @@ class Transaction(Base, TimestampMixin):
         GUID(), ForeignKey("subcategories.id", ondelete="SET NULL"), nullable=True
     )
 
-    amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default=CURRENCY_DEFAULT, nullable=False)
     transaction_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     description: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -110,7 +111,7 @@ class Transfer(Base, TimestampMixin):
     to_account_id: Mapped[uuid.UUID] = mapped_column(
         GUID(), ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False
     )
-    amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default=CURRENCY_DEFAULT, nullable=False)
     transfer_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)

@@ -1,5 +1,6 @@
 """Recurring transaction rules (bills, subscriptions, salary, EMIs...)."""
 import uuid
+from decimal import Decimal
 from datetime import date, datetime
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String, Text
@@ -33,7 +34,7 @@ class RecurringRule(Base, TimestampMixin):
         GUID(), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     frequency: Mapped[str] = mapped_column(String(20), default="monthly", nullable=False)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)

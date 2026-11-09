@@ -1,5 +1,6 @@
 """Monthly / annual budgets and their category allocations."""
 import uuid
+from decimal import Decimal
 from datetime import date
 
 from sqlalchemy import Boolean, Date, ForeignKey, Numeric, String, Text, UniqueConstraint
@@ -50,8 +51,8 @@ class BudgetAllocation(Base, TimestampMixin):
     category_id: Mapped[uuid.UUID] = mapped_column(
         GUID(), ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    planned_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)
-    carry_forward_amount: Mapped[float] = mapped_column(Numeric(18, 2), default=0, nullable=False)
+    planned_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    carry_forward_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0, nullable=False)
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     budget: Mapped[Budget] = relationship(back_populates="allocations")

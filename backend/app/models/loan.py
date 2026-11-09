@@ -1,5 +1,6 @@
 """Loans (money borrowed or lent) and repayment records."""
 import uuid
+from decimal import Decimal
 from datetime import date
 
 from sqlalchemy import Date, ForeignKey, Numeric, String, Text
@@ -19,7 +20,7 @@ class Loan(Base, TimestampMixin):
     )
     direction: Mapped[str] = mapped_column(String(20), default=LOAN_BORROWED, nullable=False)
     counterparty: Mapped[str] = mapped_column(String(150), nullable=False)
-    principal_amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)
+    principal_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     interest_rate: Mapped[float | None] = mapped_column(Numeric(6, 3), nullable=True)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -45,9 +46,9 @@ class LoanRepayment(Base, TimestampMixin):
     loan_id: Mapped[uuid.UUID] = mapped_column(
         GUID(), ForeignKey("loans.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    amount: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)
-    principal_component: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False)
-    interest_component: Mapped[float] = mapped_column(Numeric(18, 2), default=0, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    principal_component: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
+    interest_component: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0, nullable=False)
     repayment_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     account_id: Mapped[uuid.UUID | None] = mapped_column(
         GUID(), ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True

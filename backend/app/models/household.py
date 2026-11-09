@@ -1,5 +1,6 @@
 """Households, users, membership and household settings."""
 import uuid
+from decimal import Decimal
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
@@ -75,8 +76,8 @@ class HouseholdSettings(Base, TimestampMixin):
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Kolkata", nullable=False)
     date_format: Mapped[str] = mapped_column(String(20), default="DD-MM-YYYY", nullable=False)
     fiscal_year_start_month: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
-    budget_warning_threshold: Mapped[float] = mapped_column(Numeric(5, 2), default=80, nullable=False)
-    budget_critical_threshold: Mapped[float] = mapped_column(Numeric(5, 2), default=100, nullable=False)
+    budget_warning_threshold: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=80, nullable=False)
+    budget_critical_threshold: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=100, nullable=False)
     notification_lead_days: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
     backup_retention_days: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
 

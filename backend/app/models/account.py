@@ -1,5 +1,6 @@
 """Financial accounts (shared household accounts and member-owned accounts)."""
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import Boolean, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -24,7 +25,7 @@ class Account(Base, TimestampMixin):
     account_type: Mapped[str] = mapped_column(String(30), nullable=False)
     institution: Mapped[str | None] = mapped_column(String(120), nullable=True)
     account_number_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
-    opening_balance: Mapped[float] = mapped_column(Numeric(18, 2), default=0, nullable=False)
+    opening_balance: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=0, nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default=CURRENCY_DEFAULT, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

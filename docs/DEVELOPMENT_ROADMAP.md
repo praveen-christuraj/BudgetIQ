@@ -118,14 +118,15 @@ keys produce a valid xlsx; monthly/shared-vs-personal also assert PDF).
 | Permissions / isolation | `tests/test_auth.py`, `tests/test_accounts_transactions.py`, `tests/test_reports.py` |
 | API contract | all backend test modules use the FastAPI `TestClient` against the real routers |
 | Reports | `tests/test_reports.py` (values, exports, unknown-report rejection) |
-| Frontend units | `format.test.ts`, `StatCard.test.tsx`, `reports.test.tsx` — the last one pins the ten report tabs and their export keys (Vitest + Testing Library) |
+| Frontend units | `format.test.ts` (money/date formatting), `StatCard.test.tsx` |
+| Frontend behaviour | `reports.test.tsx` pins the ten report tabs and their export keys; `transactions.page.test.tsx` asserts scope badges, signed amounts, draft status and reversal-instead-of-delete; `pages.smoke.test.tsx` renders all 15 screens with a stubbed API so a broken page cannot ship |
 | Backup / restore | `backups/backup.sh`, `backups/backup-loop.sh`, runbook in [DOCKER_DEPLOYMENT_GUIDE.md](DOCKER_DEPLOYMENT_GUIDE.md#restore-procedure) |
 
 Run everything with:
 
 ```bash
 cd backend && ../.venv/bin/python -m pytest     # 45 tests
-cd frontend && npx vitest run                   # 13 tests
+cd frontend && npx vitest run                   # 31 tests
 cd frontend && npx tsc --noEmit && npm run build
 ```
 
