@@ -116,7 +116,7 @@ keys produce a valid xlsx; monthly/shared-vs-personal also assert PDF).
 | --- | --- |
 | Financial calculation | `tests/test_accounts_transactions.py`, `tests/test_budgets.py`, `tests/test_savings_loans.py` |
 | Permissions / isolation | `tests/test_auth.py`, `tests/test_accounts_transactions.py`, `tests/test_reports.py` |
-| API contract | all backend test modules use the FastAPI `TestClient` against the real routers |
+| API contract | all backend test modules use the FastAPI `TestClient` against the real routers; `test_pagination.py` pins the shared `Page` contract used by every paged list |
 | Reports | `tests/test_reports.py` (values, exports, unknown-report rejection) |
 | Frontend units | `format.test.ts` (money/date formatting), `StatCard.test.tsx` |
 | Frontend behaviour | `reports.test.tsx` pins the ten report tabs and their export keys; `transactions.page.test.tsx` asserts scope badges, signed amounts, draft status and reversal-instead-of-delete; `pages.smoke.test.tsx` renders all 15 screens with a stubbed API so a broken page cannot ship |
@@ -126,7 +126,7 @@ keys produce a valid xlsx; monthly/shared-vs-personal also assert PDF).
 Run everything with:
 
 ```bash
-cd backend && ../.venv/bin/python -m pytest     # 45 tests
+cd backend && ../.venv/bin/python -m pytest     # 47 tests
 cd frontend && npx vitest run                   # 31 tests
 cd frontend && npx tsc --noEmit && npm run build
 

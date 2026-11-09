@@ -16,7 +16,7 @@ Built exactly to the *Family Budget & Expense Management System* blueprint:
 | Tests | Pytest (backend), Vitest + Testing Library (frontend) |
 | Deployment | Docker Compose on a home computer / private LAN |
 
-![modules](https://img.shields.io/badge/modules-11-1B5E20) ![tests](https://img.shields.io/badge/backend_tests-45_passed%20%C2%B7%20frontend_tests-31_passed-2E7D32) ![money](https://img.shields.io/badge/money-Decimal_only-00695C)
+![modules](https://img.shields.io/badge/modules-11-1B5E20) ![tests](https://img.shields.io/badge/backend_tests-47_passed%20%C2%B7%20frontend_tests-31_passed-2E7D32) ![money](https://img.shields.io/badge/money-Decimal_only-00695C)
 
 ---
 
@@ -63,7 +63,7 @@ All 11 modules from the requirements baseline are implemented:
 │   │   └── main.py
 │   ├── alembic/           initial migration (PostgreSQL UUIDs)
 │   ├── scripts/           demo seed script
-│   └── tests/             45 pytest tests
+│   └── tests/             47 pytest tests
 ├── frontend/              React + TypeScript + MUI application
 │   └── src/
 │       ├── app/           providers, routing, auth context
@@ -135,7 +135,7 @@ are consistent with what a family would see. **Never run it against production.*
 ## Tests
 
 ```bash
-cd backend && ../.venv/bin/python -m pytest     # 45 tests
+cd backend && ../.venv/bin/python -m pytest     # 47 tests
 cd frontend && npm test                          # 31 tests
 cd frontend && npm run build                     # typecheck + production build
 ```

@@ -3,12 +3,13 @@ import uuid
 from datetime import date, datetime, time
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import CurrentContext, require_admin
 from app.models.audit import AuditLog
+from app.repositories.pagination import paginate
 from app.schemas.common import Page
 from app.schemas.reporting import AuditOut
 
@@ -28,8 +29,6 @@ def audit_history(
     ctx: CurrentContext = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    from sqlalchemy import func, or_
-
     filters = [AuditLog.household_id == ctx.household_id]
     if action:
         filters.append(AuditLog.action == action)
@@ -45,21 +44,14 @@ def audit_history(
         like = f"%{q.strip()}%"
         filters.append(or_(AuditLog.summary.ilike(like), AuditLog.actor_name.ilike(like), AuditLog.action.ilike(like)))
 
-    total = db.execute(select(func.count()).select_from(AuditLog).where(*filters)).scalar_one()
-    entries = db.execute(
-        select(AuditLog)
-        .where(*filters)
-        .order_by(AuditLog.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    ).scalars().all()
-    pages = (total + page_size - 1) // page_size if total else 0
-    return Page[AuditOut](
-        items=[AuditOut.model_validate(entry) for entry in entries],
-        total=total,
+    return paginate(
+        db,
+        AuditLog,
+        AuditOut,
+        filters=filters,
+        order_by=AuditLog.created_at.desc(),
         page=page,
         page_size=page_size,
-        pages=pages,
     )
 
 
